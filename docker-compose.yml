@@ -1,0 +1,52 @@
+services:
+  apache:
+    image: ghcr.io/yendpoint/neymahp-ctf-apache:3.0
+    ports: ["8080:80"]
+    depends_on: [web]
+    networks: [neymahp-net]
+
+  web:
+    image: ghcr.io/yendpoint/neymahp-ctf-web:3.0
+    environment:
+      - DJANGO_SECRET_KEY=super-secret-dev-key-do-not-use-in-prod
+      - DEBUG=True
+      - GATEWAY_URL=http://litellm:4000
+      - NEYMAHP_PORTAL_GATEWAY_KEY=sk-neymahp-key
+    expose: ["8000"]
+    networks: [neymahp-net]
+
+  litellm-db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=llmproxy
+      - POSTGRES_PASSWORD=dbpass
+      - POSTGRES_DB=litellm
+    expose: ["5432"]
+    networks: [neymahp-net]
+
+  # Internal-only — reachable only through the portal's Assistant relays.
+  litellm:
+    image: ghcr.io/yendpoint/neymahp-ctf-litellm:3.0
+    depends_on: [litellm-db]
+    environment:
+      - DATABASE_URL=postgresql://llmproxy:dbpass@litellm-db:5432/litellm
+      - LITELLM_MASTER_KEY=sk-neymahp-master-7f3c9a
+      - NEYMAHP_OPENAI_KEY=sk-proj-NeymahpREDACTED
+      - STORE_MODEL_IN_DB=False
+    expose: ["4000"]
+    networks: [neymahp-net]
+
+  litellm-seed:
+    image: ghcr.io/yendpoint/neymahp-ctf-litellm-seed:3.0
+    depends_on: [litellm-db, litellm]
+    environment:
+      - PGHOST=litellm-db
+      - POSTGRES_USER=llmproxy
+      - POSTGRES_PASSWORD=dbpass
+      - POSTGRES_DB=litellm
+    restart: "no"
+    networks: [neymahp-net]
+
+networks:
+  neymahp-net:
+    driver: bridge
